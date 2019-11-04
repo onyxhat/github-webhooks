@@ -6,6 +6,7 @@ import (
     "os"
     "context"
     "encoding/json"
+    "time"
     "fmt"
 
     "github.com/google/go-github/github"
@@ -47,8 +48,11 @@ func addBranchProtection(w http.ResponseWriter, repoName string, repoOrg string)
     ctx := context.Background()
     client := setupAuth(ctx)
 
-    //https://github.com/google/go-github/blob/master/test/integration/repos_test.go#L86
+    //Added 2 second delay because the branch would sometimes not exist before adding branch protection was attempted
+    //Not ideal but it works around the issue
+    time.Sleep(2*time.Second)
     branch, _, err := client.Repositories.GetBranch(ctx, repoOrg, repoName, "master")
+
     if err != nil {
         log.Printf("Repositories.GetBranch() returned error: %v", err)
         return nil, err
