@@ -1,33 +1,39 @@
 package main
 
 import (
+    "context"
+    "encoding/json"
+    "fmt"
     "log"
     "net/http"
     "os"
-    "context"
-    "encoding/json"
     "time"
-    "fmt"
 
     "github.com/google/go-github/github"
     "golang.org/x/oauth2"
 )
 
 func setupAuth(ctx context.Context) *github.Client{
-     ts := oauth2.StaticTokenSource(
-         &oauth2.Token{AccessToken: os.Getenv("GITHUB_ACCESS_TOKEN")},
-     )
-     tc := oauth2.NewClient(ctx, ts)
-     client := github.NewClient(tc)
+    //Setup GitHub API authentication with OAuth and return github.Client
+    ts := oauth2.StaticTokenSource(
+        &oauth2.Token{AccessToken: os.Getenv("GITHUB_ACCESS_TOKEN")},
+    )
+    tc := oauth2.NewClient(ctx, ts)
+    client := github.NewClient(tc)
 
-     return client
+    return client
 }
 
 func createIssueWithProtectionDetails(protection *github.Protection, repoName string, repoOrg string) (*github.Issue, error){
+    //Setup authentication for GithubAPI
     ctx := context.Background()
     client := setupAuth(ctx)
+
+    //Add intentation for branch protection details to "pretty print" in issue
     protectionDetails, err := json.MarshalIndent(protection, "", "    ")
     bodyString := fmt.Sprintf("@hobbsh, branch protection was automatically added to this repo with the following details:\n```%s\n```", protectionDetails) 
+
+    //Construct issue request and create issue
     issueRequest := &github.IssueRequest{
         Title: github.String("AUTO: Added branch protection"),
         Body: github.String(bodyString),
@@ -47,19 +53,21 @@ func addBranchProtection(w http.ResponseWriter, repoName string, repoOrg string)
     //Setup authentication for GitHub API
     ctx := context.Background()
     client := setupAuth(ctx)
+    branchName := "master"
 
     //Added 2 second delay because the branch would sometimes not exist before adding branch protection was attempted
     //Not ideal but it works around the issue
     time.Sleep(2*time.Second)
-    branch, _, err := client.Repositories.GetBranch(ctx, repoOrg, repoName, "master")
+    branch, _, err := client.Repositories.GetBranch(ctx, repoOrg, repoName, branchName)
 
     if err != nil {
         log.Printf("Repositories.GetBranch() returned error: %v", err)
         return nil, err
     }
 
+    // Return if branch is already protected
     if *branch.Protected {
-        log.Printf("Branch %v of repo %v is already protected", "master", repoName)
+        log.Printf("Branch %v of repo %v is already protected", branchName, repoName)
         return nil, err
     }
 
@@ -78,7 +86,7 @@ func addBranchProtection(w http.ResponseWriter, repoName string, repoOrg string)
     }
 
     //Enable branch protection on the master branch
-    protection, _, err := client.Repositories.UpdateBranchProtection(ctx, repoOrg, repoName, "master", protectionRequest)
+    protection, _, err := client.Repositories.UpdateBranchProtection(ctx, repoOrg, repoName, branchName, protectionRequest)
     if err != nil {
         log.Printf("Repositories.UpdateBranchProtection() returned error: %v", err)
         return nil, err
@@ -104,8 +112,10 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
     w.Write(response)
 }
 
-//from https://groob.io/tutorial/go-github-webhook/
+// Parts from https://groob.io/tutorial/go-github-webhook/
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
+    // Validate the payload 
+    // https://github.com/google/go-github/blob/e8bc002390592dcb5ffe203acf8593ab7651eeba/github/messages.go#L147
     payload, err := github.ValidatePayload(r, []byte(os.Getenv("GITHUB_WEBHOOK_SECRET")))
     if err != nil {
         log.Printf("Error validating request body: err=%s\n", err)
@@ -129,10 +139,14 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
             repoOrg := *e.Repo.Owner.Login
             log.Printf("Adding branch protection for repository: %s with owner: %s", repoName, repoOrg)
             protection, err := addBranchProtection(w, repoName, repoOrg)
+
+            // If there was a problem adding branch protection, return 400.
+            // Otherwise, if protection is added, create the issue in the repo with the protection details
             if err != nil {
                 respondWithError(w, http.StatusBadRequest, fmt.Sprintf("There was a problem adding branch protection: %v",err))
             } else {
                 if protection != nil {
+                    // Create the issue
                     _, err := createIssueWithProtectionDetails(protection, repoName, repoOrg)
                     if err != nil {
                         respondWithError(w, http.StatusInternalServerError, "Could not create issue in repo")
@@ -140,14 +154,17 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
                         respondWithJSON(w, http.StatusOK, fmt.Sprintf("Successfully added branch protection for repo %s", repoName))
                     }
                 } else {
+                    //Protection payload is nil, meaning that branch protection is already added
                     respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Branch protection already added for repo '%s'", repoName))
                 }
             }
         } else {
+            // If the repository event is not a "create" event, return 204
             respondWithJSON(w, http.StatusNoContent, fmt.Sprintf("Repository event is %s, not a create event. Ignoring", *e.Action))
         }
         return
     default:
+        // Default case - should not reach it if only the Repositories events type is selected in the webhook
         log.Printf("Unknown event type %s\n", github.WebHookType(r))
         respondWithError(w, http.StatusBadRequest, "Unknown event type: "+github.WebHookType(r))
         return

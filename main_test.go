@@ -2,11 +2,11 @@
 package main
 
 import (
-    "crypto/sha1"
     "bytes"
-    "crypto/hmac"
-    "encoding/hex"
     "context"
+    "crypto/hmac"
+    "crypto/sha1"
+    "encoding/hex"
     "fmt"
     "io/ioutil"
     "log"
@@ -72,8 +72,8 @@ func createTestRepo(t *testing.T) {
 }
 
 func TestFullIntegration(t *testing.T) {
+    //Determine if testing repo exists already and delete it if it does
     repoExists, err := testRepoExists()
-
     if repoExists {
         destroyTestRepo(t)
         createTestRepo(t)
@@ -81,18 +81,25 @@ func TestFullIntegration(t *testing.T) {
         createTestRepo(t)
     }
 
+    //Setup httptest with main.handleWebhook and read test repository event payload
     rr := httptest.NewRecorder()
     handler := http.HandlerFunc(handleWebhook)
     file, err := os.Open("repository_created.json")
     if err != nil {
-        log.Fatal(err)
+        t.Fatal(err)
     }
     defer file.Close()
 
+    //Read test repository event file and post it to the test http handler
     b, err := ioutil.ReadAll(file)
     req, err := http.NewRequest("POST", "/webhook", bytes.NewReader(b))
+    if err != nil {
+         t.Fatal(err)
+    }
     req.Header.Set("Content-Type", "application/json")
     secret := []byte(os.Getenv("GITHUB_WEBHOOK_SECRET"))
+
+    //Generate the signature of the payload to pass github.ValidatePayload
     signature := genMAC(b, secret)
     req.Header.Set("X-Hub-Signature", signature)
     req.Header.Set("X-Github-Event", "repository")
@@ -100,7 +107,10 @@ func TestFullIntegration(t *testing.T) {
     if err != nil {
         t.Fatal(err)
     }
+
     handler.ServeHTTP(rr, req)
+
+    //Check that the status code is 200
     if status := rr.Code; status != http.StatusOK {
         t.Errorf("handler returned wrong status code: got %v want %v",
             status, http.StatusOK)
