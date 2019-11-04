@@ -18,8 +18,8 @@ import (
 func genMAC(message, key []byte) string {
 	mac := hmac.New(sha1.New, key)
 	mac.Write(message)
-    sha1_hash := hex.EncodeToString(mac.Sum(nil))
-	return fmt.Sprintf("sha1=%s", sha1_hash)
+    sha1Hash := hex.EncodeToString(mac.Sum(nil))
+	return fmt.Sprintf("sha1=%s", sha1Hash)
 }
 
 func TestHandleWebhook(t *testing.T) {
