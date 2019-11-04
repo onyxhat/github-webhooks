@@ -11,6 +11,12 @@ Application that accepts github webhooks on repo create and sets branch protecti
 
 I decided to write this application in Go because I have very little experience with the language and wanted to challenge myself. I have done something similar to this (processing GitHub webhooks) in Python so I figured I should branch out a bit more. This application can be run with docker, deployed to Kubernetes, or just run with `go run` locally. I've setup the webhook endpoint currently to just use ngrok.
 
+## Running with docker
+`docker build -t github-webhook .`
+`docker run -it --rm -e GITHUB_WEBHOOK_SECRET=$GITHUB_WEBHOOK_SECRET -e GITHUB_ACCESS_TOKEN=$GITHUB_ACCESS_TOKEN -p 8080:8080 github-webhook`
+
+Install and run ngrok as noted below. You will still need to Setup a GitHub Access Token and the webhook itself as noted below as well.
+
 ## Running the application locally
 
 To setup your environment:
