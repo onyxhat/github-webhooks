@@ -26,11 +26,12 @@ func createIssueWithProtectionDetails(protection *github.Protection, repoName st
     ctx := context.Background()
     client := setupAuth(ctx)
     protectionDetails, err := json.MarshalIndent(protection, "", "    ")
+    bodyString := fmt.Sprintf("@hobbsh, branch protection was automatically added to this repo with the following details:\n```%s\n```", protectionDetails) 
     issueRequest := &github.IssueRequest{
         Title: github.String("AUTO: Added branch protection"),
-        Body: github.String("@hobbsh, branch protection was automatically added to this repo with the following details: ```"+string(protectionDetails)+"```"),
+        Body: github.String(bodyString),
     }
-    log.Printf("Creating issue announcing branch protection")
+    log.Printf("Creating issue announcing branch protection for repo %s", repoName)
     issue, _, err := client.Issues.Create(ctx, repoOrg, repoName, issueRequest)
 
     if err != nil {
@@ -40,6 +41,7 @@ func createIssueWithProtectionDetails(protection *github.Protection, repoName st
 
     return issue, nil
 }
+
 func addBranchProtection(w http.ResponseWriter, repoName string, repoOrg string) (*github.Protection, error){
     //Setup authentication for GitHub API
     ctx := context.Background()
@@ -102,7 +104,7 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
     payload, err := github.ValidatePayload(r, []byte(os.Getenv("GITHUB_WEBHOOK_SECRET")))
     if err != nil {
-        log.Printf("error validating request body: err=%s\n", err)
+        log.Printf("Error validating request body: err=%s\n", err)
         respondWithError(w, http.StatusBadRequest, "Error validating request body")
         return
     }
@@ -110,7 +112,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 
     event, err := github.ParseWebHook(github.WebHookType(r), payload)
     if err != nil {
-        log.Printf("could not parse webhook: err=%s\n", err)
+        log.Printf("Could not parse webhook: err=%s\n", err)
         respondWithError(w, http.StatusBadRequest, "Could not parse webhook")
         return
     }
@@ -127,23 +129,23 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
                 respondWithError(w, http.StatusBadRequest, fmt.Sprintf("There was a problem adding branch protection: %v",err))
             } else {
                 if protection != nil {
-                    issue, err := createIssueWithProtectionDetails(protection, repoName, repoOrg)
+                    _, err := createIssueWithProtectionDetails(protection, repoName, repoOrg)
                     if err != nil {
                         respondWithError(w, http.StatusInternalServerError, "Could not create issue in repo")
                     } else {
-                        respondWithJSON(w, http.StatusOK, issue)
+                        respondWithJSON(w, http.StatusOK, fmt.Sprintf("Successfully added branch protection for repo %s", repoName))
                     }
                 } else {
                     respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Branch protection already added for repo '%s'", repoName))
                 }
             }
         } else {
-            respondWithJSON(w, http.StatusNoContent, "Repository event is not a create event. Ignoring")
+            respondWithJSON(w, http.StatusNoContent, fmt.Sprintf("Repository event is %s, not a create event. Ignoring", *e.Action))
         }
         return
     default:
-        log.Printf("unknown event type %s\n", github.WebHookType(r))
-        respondWithError(w, http.StatusBadRequest, "Uknonwn event type: "+github.WebHookType(r))
+        log.Printf("Unknown event type %s\n", github.WebHookType(r))
+        respondWithError(w, http.StatusBadRequest, "Unknown event type: "+github.WebHookType(r))
         return
     }
 }

@@ -6,6 +6,7 @@ import (
     "bytes"
     "crypto/hmac"
     "encoding/hex"
+    "context"
     "fmt"
     "io/ioutil"
     "log"
@@ -13,7 +14,12 @@ import (
     "net/http/httptest"
     "os"
     "testing"
+
+    "github.com/google/go-github/github"
 )
+
+var repoName = "testing"
+var repoOrg = "wyl1e"
 
 func genMAC(message, key []byte) string {
     mac := hmac.New(sha1.New, key)
@@ -22,7 +28,55 @@ func genMAC(message, key []byte) string {
     return fmt.Sprintf("sha1=%s", sha1Hash)
 }
 
-func TestHandleWebhook(t *testing.T) {
+func testRepoExists() (bool, error) {
+    ctx := context.Background()
+    client := setupAuth(ctx)
+    _, _, err := client.Repositories.Get(ctx, repoOrg, repoName)
+
+    if err != nil {
+        log.Printf("Could not find repo %s", repoName)
+        return false, err
+    }
+
+    return true, nil
+}
+
+func destroyTestRepo(t *testing.T) {
+    ctx := context.Background()
+    client := setupAuth(ctx)
+    _, err := client.Repositories.Delete(ctx, repoOrg, repoName)
+
+    if err != nil {
+        t.Fatalf("Error deleting repo %s, %v", repoName, err)
+        return
+    }
+}
+
+func createTestRepo(t *testing.T) {
+     ctx := context.Background()
+     client := setupAuth(ctx)
+     repo := &github.Repository {
+        Name: github.String(repoName),
+        AutoInit: github.Bool(true),
+     }
+
+     _, _, err := client.Repositories.Create(ctx, repoOrg, repo)
+
+     if err != nil {
+        t.Fatalf("Error creating repo %s, %v", repoName, err)
+     }
+}
+
+func TestFullIntegration(t *testing.T) {
+    repoExists, err := testRepoExists()
+
+    if repoExists {
+        destroyTestRepo(t)
+        createTestRepo(t)
+    } else {
+        createTestRepo(t)
+    }
+
     rr := httptest.NewRecorder()
     handler := http.HandlerFunc(handleWebhook)
     file, err := os.Open("repository_created.json")
@@ -30,6 +84,7 @@ func TestHandleWebhook(t *testing.T) {
         log.Fatal(err)
     }
     defer file.Close()
+
     b, err := ioutil.ReadAll(file)
     req, err := http.NewRequest("POST", "/webhook", bytes.NewReader(b))
     req.Header.Set("Content-Type", "application/json")
