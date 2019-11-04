@@ -1,8 +1,8 @@
 package main
 
 import (
-	"log"
-	"net/http"
+    "log"
+    "net/http"
     "os"
     "context"
     "encoding/json"
@@ -47,36 +47,36 @@ func addBranchProtection(w http.ResponseWriter, repoName string, repoOrg string)
 
     //https://github.com/google/go-github/blob/master/test/integration/repos_test.go#L86
     branch, _, err := client.Repositories.GetBranch(ctx, repoOrg, repoName, "master")
-	if err != nil {
-		log.Printf("Repositories.GetBranch() returned error: %v", err)
+    if err != nil {
+        log.Printf("Repositories.GetBranch() returned error: %v", err)
         return nil, err
-	}
+    }
 
-	if *branch.Protected {
-		log.Printf("Branch %v of repo %v is already protected", "master", repoName)
+    if *branch.Protected {
+        log.Printf("Branch %v of repo %v is already protected", "master", repoName)
         return nil, err
-	}
+    }
 
     //Setup protection request: https://godoc.org/github.com/google/go-github/github#ProtectionRequest
-	protectionRequest := &github.ProtectionRequest{
-		RequiredStatusChecks: &github.RequiredStatusChecks{
-			Strict:   true,
-			Contexts: []string{"continuous-integration"},
-		},
-		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcementRequest{
-			DismissStaleReviews: true,
+    protectionRequest := &github.ProtectionRequest{
+        RequiredStatusChecks: &github.RequiredStatusChecks{
+            Strict:   true,
+            Contexts: []string{"continuous-integration"},
+        },
+        RequiredPullRequestReviews: &github.PullRequestReviewsEnforcementRequest{
+            DismissStaleReviews: true,
             RequireCodeOwnerReviews: true,
             RequiredApprovingReviewCount: 2,
-		},
+        },
         EnforceAdmins: true,
-	}
+    }
 
     //Enable branch protection on the master branch
-	protection, _, err := client.Repositories.UpdateBranchProtection(ctx, repoOrg, repoName, "master", protectionRequest)
-	if err != nil {
-		log.Printf("Repositories.UpdateBranchProtection() returned error: %v", err)
+    protection, _, err := client.Repositories.UpdateBranchProtection(ctx, repoOrg, repoName, "master", protectionRequest)
+    if err != nil {
+        log.Printf("Repositories.UpdateBranchProtection() returned error: %v", err)
         return nil, err
-	}
+    }
 
     return protection, nil
 }
@@ -84,40 +84,40 @@ func addBranchProtection(w http.ResponseWriter, repoName string, repoOrg string)
 // Response functions from: https://github.com/krishbhanushali/go-rest-unit-testing/blob/master/api.go
 // RespondWithError is called on an error to return info regarding error
 func respondWithError(w http.ResponseWriter, code int, message string) {
-	respondWithJSON(w, code, map[string]string{"error": message})
+    respondWithJSON(w, code, map[string]string{"error": message})
 }
 
 // Called for responses to encode and send json data
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	//encode payload to json
-	response, _ := json.Marshal(payload)
+    //encode payload to json
+    response, _ := json.Marshal(payload)
 
-	// set headers and write response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(response)
+    // set headers and write response
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(code)
+    w.Write(response)
 }
 
 //from https://groob.io/tutorial/go-github-webhook/
 func handleWebhook(w http.ResponseWriter, r *http.Request) {
-	payload, err := github.ValidatePayload(r, []byte(os.Getenv("GITHUB_WEBHOOK_SECRET")))
-	if err != nil {
-		log.Printf("error validating request body: err=%s\n", err)
+    payload, err := github.ValidatePayload(r, []byte(os.Getenv("GITHUB_WEBHOOK_SECRET")))
+    if err != nil {
+        log.Printf("error validating request body: err=%s\n", err)
         respondWithError(w, http.StatusBadRequest, "Error validating request body")
-		return
-	}
-	defer r.Body.Close()
+        return
+    }
+    defer r.Body.Close()
 
-	event, err := github.ParseWebHook(github.WebHookType(r), payload)
-	if err != nil {
-		log.Printf("could not parse webhook: err=%s\n", err)
+    event, err := github.ParseWebHook(github.WebHookType(r), payload)
+    if err != nil {
+        log.Printf("could not parse webhook: err=%s\n", err)
         respondWithError(w, http.StatusBadRequest, "Could not parse webhook")
-		return
-	}
+        return
+    }
 
     //If it's a repository create event, add branch protection. Else return 400.
-	switch e := event.(type) {
-	case *github.RepositoryEvent:
+    switch e := event.(type) {
+    case *github.RepositoryEvent:
         if *e.Action == "created" {
             repoName := *e.Repo.Name
             repoOrg := *e.Repo.Owner.Login
@@ -141,15 +141,15 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
             respondWithJSON(w, http.StatusNoContent, "Repository event is not a create event. Ignoring")
         }
         return
-	default:
-		log.Printf("unknown event type %s\n", github.WebHookType(r))
+    default:
+        log.Printf("unknown event type %s\n", github.WebHookType(r))
         respondWithError(w, http.StatusBadRequest, "Uknonwn event type: "+github.WebHookType(r))
         return
-	}
+    }
 }
 
 func main() {
     log.Println("server started")
-	http.HandleFunc("/webhook", handleWebhook)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+    http.HandleFunc("/webhook", handleWebhook)
+    log.Fatal(http.ListenAndServe(":8080", nil))
 }

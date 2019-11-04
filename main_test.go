@@ -2,7 +2,7 @@
 package main
 
 import (
-	"crypto/sha1"
+    "crypto/sha1"
     "bytes"
     "crypto/hmac"
     "encoding/hex"
@@ -16,10 +16,10 @@ import (
 )
 
 func genMAC(message, key []byte) string {
-	mac := hmac.New(sha1.New, key)
-	mac.Write(message)
+    mac := hmac.New(sha1.New, key)
+    mac.Write(message)
     sha1Hash := hex.EncodeToString(mac.Sum(nil))
-	return fmt.Sprintf("sha1=%s", sha1Hash)
+    return fmt.Sprintf("sha1=%s", sha1Hash)
 }
 
 func TestHandleWebhook(t *testing.T) {
@@ -38,20 +38,20 @@ func TestHandleWebhook(t *testing.T) {
     req.Header.Set("X-Hub-Signature", signature)
     req.Header.Set("X-Github-Event", "repository")
 
-	if err != nil {
-		t.Fatal(err)
-	}
+    if err != nil {
+        t.Fatal(err)
+    }
     handler.ServeHTTP(rr, req)
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
-	}
+    if status := rr.Code; status != http.StatusOK {
+        t.Errorf("handler returned wrong status code: got %v want %v",
+            status, http.StatusOK)
+    }
 
-	// Check the response body is what we expect.
-	expected := `"wyl1e/testing"`
-	if rr.Body.String() != expected {
-		t.Errorf("handler returned unexpected body: got %v want %v",
-			rr.Body.String(), expected)
-	}
+    // Check the response body is what we expect.
+    expected := `"wyl1e/testing"`
+    if rr.Body.String() != expected {
+        t.Errorf("handler returned unexpected body: got %v want %v",
+            rr.Body.String(), expected)
+    }
 
 }
