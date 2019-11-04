@@ -55,7 +55,7 @@ Install go dependencies:
 - Type in anything for the webhook secret but make sure you can remember it because it needs to be exported as an environment variable
 - After this, export the secret as an environment variable in your terminal session: `export GITHUB_WEBHOOK_SECRET=<THE SECRET>` 
 - In the root of this repo, run: `go run main.go` in the same terminal session that you exported your environment variable (GITHUB_ACCESS_TOKEN, GITHUB_WEBHOOK_SECRET)
-- Under "Which events to trigger", select only `Repositories` events
+- Under "Which events to trigger" back in the Organization Webhooks page, select only `Repositories` events and save the webhook.
 - The initial ping event should return 204
 
 ## Testing
