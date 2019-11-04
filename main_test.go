@@ -31,6 +31,7 @@ func genMAC(message, key []byte) string {
 func testRepoExists() (bool, error) {
     ctx := context.Background()
     client := setupAuth(ctx)
+    log.Printf("Determining if repository %s exists already", repoName)
     _, _, err := client.Repositories.Get(ctx, repoOrg, repoName)
 
     if err != nil {
@@ -44,6 +45,7 @@ func testRepoExists() (bool, error) {
 func destroyTestRepo(t *testing.T) {
     ctx := context.Background()
     client := setupAuth(ctx)
+    log.Printf("Destroying repo %s", repoName)
     _, err := client.Repositories.Delete(ctx, repoOrg, repoName)
 
     if err != nil {
@@ -60,10 +62,12 @@ func createTestRepo(t *testing.T) {
         AutoInit: github.Bool(true),
      }
 
+     log.Printf("Creating repo %s", repoName)
      _, _, err := client.Repositories.Create(ctx, repoOrg, repo)
 
      if err != nil {
         t.Fatalf("Error creating repo %s, %v", repoName, err)
+        return
      }
 }
 
@@ -103,7 +107,7 @@ func TestFullIntegration(t *testing.T) {
     }
 
     // Check the response body is what we expect.
-    expected := `"wyl1e/testing"`
+    expected := `"Successfully added branch protection for repo testing"`
     if rr.Body.String() != expected {
         t.Errorf("handler returned unexpected body: got %v want %v",
             rr.Body.String(), expected)
