@@ -61,13 +61,15 @@ var policy = backoff.NewExponential(
 func getBranch(ctx context.Context, client *github.Client, repoOrg string, repoName string, branchName string) (*github.Branch, *github.Response, error) {
     b, cancel := policy.Start(context.Background())
     defer cancel()
+    retries := 0
     //Use backoff for rety logic because Repositories.GetBranch sometimes returns 404s if the repo is slow to create
     for backoff.Continue(b) {
         branch, response, err := client.Repositories.GetBranch(ctx, repoOrg, repoName, branchName)
         if err == nil && response.StatusCode == 200 && branch != nil{
             return branch, response, err
         }
-        log.Printf("Retrying getBranch for %s", branchName)
+        retries++
+        log.Printf("Retrying (%v) getBranch for %s in repo %s", retries, branchName, repoName)
     }
 
     return nil, nil, errors.New("Failed to find branch")
