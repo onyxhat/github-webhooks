@@ -21,6 +21,8 @@ import (
 var repoName = "testing"
 var repoOrg = "wyl1e"
 
+
+// https://github.com/google/go-github/blob/e8bc002390592dcb5ffe203acf8593ab7651eeba/github/messages.go#L89
 func genMAC(message, key []byte) string {
     mac := hmac.New(sha1.New, key)
     mac.Write(message)
@@ -42,43 +44,64 @@ func testRepoExists() (bool, error) {
     return true, nil
 }
 
-func destroyTestRepo(t *testing.T) {
+func destroyTestRepo(t *testing.T, r string) {
     ctx := context.Background()
     client := setupAuth(ctx)
-    log.Printf("Destroying repo %s", repoName)
-    _, err := client.Repositories.Delete(ctx, repoOrg, repoName)
+    log.Printf("Destroying repo %s", r)
+    _, err := client.Repositories.Delete(ctx, repoOrg, r)
 
     if err != nil {
-        t.Fatalf("Error deleting repo %s, %v", repoName, err)
+        t.Fatalf("Error deleting repo %s, %v", r, err)
         return
     }
 }
 
-func createTestRepo(t *testing.T) {
+func createTestRepo(t *testing.T, r string, autoinit bool) {
      ctx := context.Background()
      client := setupAuth(ctx)
      repo := &github.Repository {
-        Name: github.String(repoName),
-        AutoInit: github.Bool(true),
+        Name: github.String(r),
+        AutoInit: github.Bool(autoinit),
      }
 
-     log.Printf("Creating repo %s", repoName)
+     log.Printf("Creating repo %s", r)
      _, _, err := client.Repositories.Create(ctx, repoOrg, repo)
 
      if err != nil {
-        t.Fatalf("Error creating repo %s, %v", repoName, err)
+        t.Fatalf("Error creating repo %s, %v", r, err)
         return
      }
+}
+
+func TestGetBranch(t *testing.T) {
+    ctx := context.Background()
+    client := setupAuth(ctx)
+    createTestRepo(t, "branchtest", true)
+    branch, response, err := getBranch(ctx, client, repoOrg, "branchtest", "master")
+
+    if err != nil {
+        t.Fatalf("There was an error with Repositories.GetBranch(): %v", err)
+    }
+
+    if response.StatusCode == 404{
+        t.Fatalf("Failed to find master branch!")
+    }
+
+    if *branch.Protected {
+        t.Fatalf("Branch is somehow already protected!")
+    }
+
+    destroyTestRepo(t, "branchtest")
 }
 
 func TestFullIntegration(t *testing.T) {
     //Determine if testing repo exists already and delete it if it does
     repoExists, err := testRepoExists()
     if repoExists {
-        destroyTestRepo(t)
-        createTestRepo(t)
+        destroyTestRepo(t, repoName)
+        createTestRepo(t, repoName, true)
     } else {
-        createTestRepo(t)
+        createTestRepo(t, repoName, true)
     }
 
     //Setup httptest with main.handleWebhook and read test repository event payload

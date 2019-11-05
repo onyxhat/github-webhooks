@@ -3,6 +3,7 @@ package main
 import (
     "context"
     "encoding/json"
+    "errors"
     "fmt"
     "log"
     "net/http"
@@ -11,6 +12,7 @@ import (
 
     "github.com/google/go-github/github"
     "golang.org/x/oauth2"
+    "github.com/lestrrat-go/backoff"
 )
 
 func setupAuth(ctx context.Context) *github.Client{
@@ -49,25 +51,44 @@ func createIssueWithProtectionDetails(protection *github.Protection, repoName st
     return issue, nil
 }
 
+// Settings for backoff libary used in getBranch()
+var policy = backoff.NewExponential(
+  backoff.WithInterval(100*time.Millisecond), // base interval
+  backoff.WithJitterFactor(0.05), // 5% jitter
+  backoff.WithMaxRetries(25), // If not specified, default number of retries is 10
+)
+
+func getBranch(ctx context.Context, client *github.Client, repoOrg string, repoName string, branchName string) (*github.Branch, *github.Response, error) {
+    b, cancel := policy.Start(context.Background())
+    defer cancel()
+    //Use backoff for rety logic because Repositories.GetBranch sometimes returns 404s if the repo is slow to create
+    for backoff.Continue(b) {
+        branch, response, err := client.Repositories.GetBranch(ctx, repoOrg, repoName, branchName)
+        if err == nil && response.StatusCode == 200 && branch != nil{
+            return branch, response, err
+        }
+        log.Printf("Retrying getBranch for %s", branchName)
+    }
+
+    return nil, nil, errors.New("Failed to find branch")
+}
+
 func addBranchProtection(w http.ResponseWriter, repoName string, repoOrg string) (*github.Protection, error){
     //Setup authentication for GitHub API
     ctx := context.Background()
     client := setupAuth(ctx)
     branchName := "master"
 
-    //Added 2 second delay because the branch would sometimes not exist before adding branch protection was attempted
-    //Not ideal but it works around the issue
-    time.Sleep(2*time.Second)
-    branch, _, err := client.Repositories.GetBranch(ctx, repoOrg, repoName, branchName)
+    //Find out if branch exists and if it is already protected
+    branch, _, err := getBranch(ctx, client, repoOrg, repoName, branchName)
 
     if err != nil {
-        log.Printf("Repositories.GetBranch() returned error: %v", err)
+        log.Printf("Error getting branch! %v", err)
         return nil, err
     }
 
-    // Return if branch is already protected
     if *branch.Protected {
-        log.Printf("Branch %v of repo %v is already protected", branchName, repoName)
+        log.Printf("Branch is already protected!")
         return nil, err
     }
 
