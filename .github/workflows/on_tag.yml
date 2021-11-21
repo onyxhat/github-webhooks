@@ -1,0 +1,77 @@
+name: Release Docker Image
+
+on:
+  release:
+    types:
+      - prereleased
+      #- released
+
+env:
+  BINARY_OUTDIR: bin
+
+jobs:
+  containerize:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        ref: ${{ github.sha }}
+
+    - uses: FranzDiebold/github-env-vars-action@v2.1.0
+    
+    - name: Override ENV
+      uses: c-py/action-dotenv-to-setenv@v3
+      continue-on-error: true
+    
+    - name: Get Release Asset(s)
+      uses: fabriciobastian/download-release-asset-action@v1.0.6
+      with:
+        repository: ${{ github.repository }}
+        version: ${{ env.CI_ACTION_REF_NAME }}
+        file: ${{ env.CI_REPOSITORY_NAME_SLUG }}-linux-386
+        out: ${{ env.BINARY_OUTDIR }}
+
+    - name: Docker Login
+      id: login
+      uses: Azure/docker-login@v1
+      with:
+        username: ${{ secrets.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_SECRET }}
+
+    - name: Build Docker image
+      id: build
+      run: |
+        docker build . --no-cache --file Dockerfile --tag ${CI_REPOSITORY_NAME_SLUG}:${CI_SHA_SHORT} --build-arg DOCKER_BIN=${CI_REPOSITORY_NAME_SLUG}-linux-386
+        docker tag ${CI_REPOSITORY_NAME_SLUG}:${CI_SHA_SHORT} ${CI_REPOSITORY_OWNER_SLUG}/${CI_REPOSITORY_NAME_SLUG}:${CI_REF_NAME/v/}
+        docker tag ${CI_REPOSITORY_NAME_SLUG}:${CI_SHA_SHORT} ${CI_REPOSITORY_OWNER_SLUG}/${CI_REPOSITORY_NAME_SLUG}:latest
+
+    - name: Image Scanning
+      id: scan
+      uses: Azure/container-scan@v0
+      with:
+        image-name: ${{ env.CI_REPOSITORY_NAME_SLUG }}:${{ env.CI_SHA_SHORT }}
+
+    - name: Push Docker image
+      id: push
+      run: |
+        docker push ${CI_REPOSITORY_OWNER_SLUG}/${CI_REPOSITORY_NAME_SLUG}:${CI_REF_NAME/v/}
+        docker push ${CI_REPOSITORY_OWNER_SLUG}/${CI_REPOSITORY_NAME_SLUG}:latest
+
+    - name: Create Release
+      uses: ncipollo/release-action@v1
+      with:
+        name: ${{ env.CI_REPOSITORY_NAME_SLUG }}-${{ env.CI_REF_NAME }}
+        commit: ${{ github.sha }}
+        tag: ${{ env.CI_REF_NAME }}
+        token: ${{ secrets.ONYXHAT_PAT }}
+        prerelease: false
+        allowUpdates: true
+
+    - name: Rollback Release
+      uses: author/action-rollback@1.0.0
+      if: failure()
+      with:
+        tag: ${{ env.CI_REF_NAME }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.ONYXHAT_PAT }}
