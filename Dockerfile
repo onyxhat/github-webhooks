@@ -1,11 +1,14 @@
-FROM golang:1.13.4-alpine3.10
+FROM alpine:3.15
+ARG DOCKER_BIN
 
-RUN apk add git
+LABEL MAINTAINER="onyxhat"
+LABEL REPO="https://github.com/onyxhat/github-webhooks"
+LABEL FORKED_FROM="https://github.com/hobbsh/github-webhooks"
 
-WORKDIR /go/src/app
-COPY main.go .
-RUN go get -d -v ./...
-RUN go install -v ./...
+WORKDIR /app/
+
+COPY ./bin/${DOCKER_BIN} /app/webhook-svc
+RUN chmod -R +x /app
 
 EXPOSE 8080
-CMD ["app"]
+CMD ["/app/webhook-svc"]

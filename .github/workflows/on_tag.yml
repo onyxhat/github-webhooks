@@ -4,7 +4,6 @@ on:
   release:
     types:
       - prereleased
-      #- released
 
 env:
   BINARY_OUTDIR: bin
