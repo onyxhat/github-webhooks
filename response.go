@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Response functions from: https://github.com/krishbhanushali/go-rest-unit-testing/blob/master/api.go
@@ -19,5 +21,8 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	// set headers and write response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	w.Write(response)
+	_, err := w.Write(response)
+	if err != nil {
+		log.Errorf("w.Write() response failed: %v", err)
+	}
 }
