@@ -1,4 +1,3 @@
-// handlers_test.go
 package main
 
 import (
@@ -9,13 +8,15 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/google/go-github/github"
+	"github.com/onyxhat/github-webhooks"
 )
 
 var repoName = "testing"
