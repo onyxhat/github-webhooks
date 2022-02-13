@@ -16,7 +16,7 @@ func createIssueWithProtectionDetails(protection *github.Protection, repoName st
 	client := setupAuth(ctx)
 
 	//Add intentation for branch protection details to "pretty print" in issue
-	protectionDetails, err := json.MarshalIndent(protection, "", "    ")
+	protectionDetails, _ := json.MarshalIndent(protection, "", "    ")
 	bodyString := fmt.Sprintf("Branch protection was automatically added to this repo with the following details:\n```%s\n```", protectionDetails)
 
 	//Construct issue request and create issue
