@@ -11,50 +11,78 @@ import (
 	"github.com/lestrrat-go/backoff"
 )
 
-func getBranch(ctx context.Context, client *github.Client, repoOrg string, repoName string, branchName string) (*github.Branch, *github.Response, error) {
-	b, cancel := policy.Start(context.Background())
-	defer cancel()
-	retries := 0
-	//Use backoff for rety logic because Repositories.GetBranch sometimes returns 404s if the repo is slow to create
-	for backoff.Continue(b) {
-		branch, response, err := client.Repositories.GetBranch(ctx, repoOrg, repoName, branchName)
-		if err == nil && response.StatusCode == 200 && branch != nil {
-			return branch, response, err
+func branchFilter(diff []*github.Branch, ref []string) ([]*github.Branch, error) {
+	var inBoth []*github.Branch
+
+	for _, d := range diff {
+		for _, r := range ref {
+			if *d.Name == r {
+				inBoth = append(inBoth, d)
+			}
 		}
-		retries++
-		log.Printf("Retrying (%v) getBranch for %s in repo %s", retries, branchName, repoName)
 	}
 
-	return nil, nil, errors.New("Failed to find branch")
+	if len(inBoth) == 0 {
+		return nil, errors.New("no matching branches")
+	}
+
+	return inBoth, nil
 }
 
-func addBranchProtection(w http.ResponseWriter, repoName string, repoOrg string, branchName string) (*github.Protection, error) {
+func getAllBranches(ctx context.Context, client *github.Client, cfg config, repoName string) ([]*github.Branch, *github.Response, error) {
+	b, cancel := policy.Start(context.Background())
+	defer cancel()
+	var retries int
+
+	for backoff.Continue(b) {
+		branches, response, err := client.Repositories.ListBranches(ctx, cfg.Organization, repoName, nil)
+		if err == nil && response.StatusCode == 200 && len(branches) > 0 {
+			return branches, response, err
+		}
+		retries++
+		log.Infof("Retrying (%v) getAllBranches in repo %s", retries, repoName)
+	}
+
+	return nil, nil, errors.New("failed to retrieve list of branches")
+}
+
+func addBranchProtection(w http.ResponseWriter, repoName string, repoOrg string) ([]*github.Protection, error) {
 	//Setup authentication for GitHub API
 	ctx := context.Background()
 	client := setupAuth(ctx)
 
-	//Find out if branch exists and if it is already protected
-	branch, _, err := getBranch(ctx, client, repoOrg, repoName, branchName)
+	var protections []*github.Protection
 
+	//Get a list of all branches on repo
+	allBranches, _, err := getAllBranches(ctx, client, defaultConfig, repoName)
 	if err != nil {
-		log.Printf("Error getting branch! %v", err)
+		log.Warnf("%s: %v", repoName, err)
 		return nil, err
 	}
 
-	if *branch.Protected {
-		log.Printf("Branch is already protected!")
-		return nil, err
-	}
-
-	//Setup protection request: https://godoc.org/github.com/google/go-github/github#ProtectionRequest
-	protectionRequest := defaultProtection
-
-	//Enable branch protection on the main branch
-	protection, _, err := client.Repositories.UpdateBranchProtection(ctx, repoOrg, repoName, branchName, protectionRequest)
+	branches, err := branchFilter(allBranches, defaultConfig.BranchNames)
 	if err != nil {
-		log.Printf("Repositories.UpdateBranchProtection() returned error: %v", err)
+		log.Warnf("%s - %v", repoName, err)
 		return nil, err
 	}
 
-	return protection, nil
+	for _, b := range branches {
+		if *b.Protected {
+			log.Warnf("%s is already protected", *b.Name)
+		}
+
+		//Setup protection request: https://godoc.org/github.com/google/go-github/github#ProtectionRequest
+		protectionRequest, _, err := client.Repositories.UpdateBranchProtection(ctx, repoOrg, repoName, *b.Name, defaultConfig.ProtectionSettings)
+		if err != nil {
+			log.Errorf("Repositories.UpdateBranchProtection() returned error: %v", err)
+		} else {
+			protections = append(protections, protectionRequest)
+		}
+	}
+
+	if len(protections) == 0 {
+		return nil, errors.New("no protection requests were successful")
+	}
+
+	return protections, nil
 }

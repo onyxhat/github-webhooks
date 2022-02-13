@@ -14,15 +14,23 @@ var policy = backoff.NewExponential(
 	backoff.WithMaxRetries(25),                 // If not specified, default number of retries is 10
 )
 
-var defaultProtection = &github.ProtectionRequest{
-	RequiredStatusChecks: &github.RequiredStatusChecks{
-		Strict:   true,
-		Contexts: []string{"continuous-integration"},
+var defaultConfig = config{
+	BranchNames:  []string{"main", "master", "dev", "development"},
+	Organization: "onyxhat-org",
+	ProtectionSettings: &github.ProtectionRequest{
+		RequiredStatusChecks: &github.RequiredStatusChecks{
+			Strict:   true,
+			Contexts: []string{"ci", "lint", "scan", "etc"},
+		},
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcementRequest{
+			DismissStaleReviews:          true,
+			RequireCodeOwnerReviews:      true,
+			RequiredApprovingReviewCount: 1,
+		},
+		EnforceAdmins: false,
+		Restrictions: &github.BranchRestrictionsRequest{
+			Users: []string{},
+			Teams: []string{},
+		},
 	},
-	RequiredPullRequestReviews: &github.PullRequestReviewsEnforcementRequest{
-		DismissStaleReviews:          true,
-		RequireCodeOwnerReviews:      true,
-		RequiredApprovingReviewCount: 2,
-	},
-	EnforceAdmins: true,
 }

@@ -24,7 +24,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	event, err := github.ParseWebHook(github.WebHookType(r), payload)
 	if err != nil {
-		log.Printf("Could not parse webhook: err=%s\n", err)
+		log.Errorf("Could not parse webhook: err=%s\n", err)
 		respondWithError(w, http.StatusBadRequest, "Could not parse webhook")
 		return
 	}
@@ -35,27 +35,23 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		if *e.Action == "created" {
 			repoName := *e.Repo.Name
 			repoOrg := *e.Repo.Owner.Login
-			branchName := "main" //Temporary until picked up from config file and defaults defined.
 
-			log.Printf("Adding branch protection for repository: %s with owner: %s", repoName, repoOrg)
-			protection, err := addBranchProtection(w, repoName, repoOrg, branchName)
+			log.Infof("Adding branch protection for repository: %s with owner: %s", repoName, repoOrg)
+			protections, err := addBranchProtection(w, repoName, repoOrg)
 
 			// If there was a problem adding branch protection, return 400.
 			// Otherwise, if protection is added, create the issue in the repo with the protection details
 			if err != nil {
 				respondWithError(w, http.StatusBadRequest, fmt.Sprintf("There was a problem adding branch protection: %v", err))
 			} else {
-				if protection != nil {
+				for _, p := range protections {
 					// Create the issue
-					_, err := createIssueWithProtectionDetails(protection, repoName, repoOrg)
+					_, err := createIssueWithProtectionDetails(p, repoName, repoOrg)
 					if err != nil {
 						respondWithError(w, http.StatusInternalServerError, "Could not create issue in repo")
 					} else {
 						respondWithJSON(w, http.StatusOK, fmt.Sprintf("Successfully added branch protection for repo %s", repoName))
 					}
-				} else {
-					//Protection payload is nil, meaning that branch protection is already added
-					respondWithError(w, http.StatusBadRequest, fmt.Sprintf("Branch protection already added for repo '%s'", repoName))
 				}
 			}
 		} else {
@@ -65,7 +61,7 @@ func handleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	default:
 		// Default case - should not reach it if only the Repositories events type is selected in the webhook
-		log.Printf("Unknown event type %s\n", github.WebHookType(r))
+		log.Errorf("Unhandled event type %s\n", github.WebHookType(r))
 		respondWithError(w, http.StatusBadRequest, "Unknown event type: "+github.WebHookType(r))
 		return
 	}
